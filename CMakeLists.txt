@@ -25,7 +25,7 @@ find_package(Threads REQUIRED)
 add_subdirectory(.cpp_tool_kit)
 
 #add_subdirectory(S3Auth)
-#add_subdirectory(S3Common)
+add_subdirectory(S3Common)
 #add_subdirectory(S3Core)
 #add_subdirectory(S3FileStorage)
 #add_subdirectory(S3MetaDB)
