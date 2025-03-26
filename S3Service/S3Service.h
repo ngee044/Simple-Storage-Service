@@ -39,12 +39,14 @@ namespace S3Service
 		auto download_file(const std::string& message) -> std::tuple<bool, std::optional<std::string>>;
 
 	private:
-		std::map<std::string, std::function<std::tuple<bool, std::string&>(const std::string&)>> commands_;
+		std::map<std::string, std::function<std::tuple<bool, std::optional<std::string>>(const std::string&)>> commands_;
 		bool is_running_;
 		
 		std::shared_ptr<WorkQueueConsume> work_queue_consume_;
 		std::shared_ptr<Configurations> configurations_;
 		std::shared_ptr<ThreadPool> thread_pool_;
+
+		const int work_queue_consume_channel_id_ = 1;
 	
 	};
 }

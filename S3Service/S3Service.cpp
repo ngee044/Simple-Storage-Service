@@ -21,24 +21,79 @@ namespace S3Service
 		, thread_pool_(nullptr)
 		, work_queue_consume_(nullptr)
 	{
+		if (configurations_ == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "Configurations is not initialized.");
+			return;
+		}
 
+		commands_.insert({ "create_bucket", std::bind(&S3ServiceMain::create_bucket, this, std::placeholders::_1) });
+		commands_.insert({ "upload_file", std::bind(&S3ServiceMain::upload_file, this, std::placeholders::_1) });
+		commands_.insert({ "download_file", std::bind(&S3ServiceMain::download_file, this, std::placeholders::_1) });
 	}
 
 	S3ServiceMain::~S3ServiceMain()
 	{
+		stop();
 	}
 
 	auto S3ServiceMain::start() -> std::tuple<bool, std::optional<std::string>>
 	{
-		return std::tuple<bool, std::optional<std::string>>();
+		auto [result, error_message] = create_thread_pool();
+		if (!result)
+		{
+			Logger::handle().write(LogTypes::Error, error_message.value());
+			return { false, error_message };
+		}
+
+		SSLOptions ssl_options;
+		ssl_options.use_ssl(configurations_->use_ssl());
+		ssl_options.ca_cert(configurations_->ca_cert());
+		ssl_options.engine(configurations_->engine());
+		ssl_options.client_cert(configurations_->client_cert());
+		ssl_options.client_key(configurations_->client_key());
+
+		work_queue_consume_ = std::make_shared<WorkQueueConsume>(configurations_->rabbit_mq_host(), 
+															 configurations_->rabbit_mq_port(), 
+															 configurations_->rabbit_mq_user_name(),
+															 configurations_->rabbit_mq_password(), ssl_options);
+														 
+		std::tie(result, error_message) = work_queue_consume_->start();
+		if (!result)
+		{
+			Logger::handle().write(LogTypes::Error, error_message.value());
+			return { false, error_message };
+		}
+
+		Logger::handle().write(LogTypes::Information, "work queue consume started");
+
+		std::tie(result, error_message) = work_queue_consume_->connect(60);
+		if (!result)
+		{
+			Logger::handle().write(LogTypes::Error, fmt::format("Failed to connect work queue consume: {}", error_message.value()));
+			return { false, fmt::format("Failed to connect work queue consume: {}", error_message.value()) };
+		}
+		Logger::handle().write(LogTypes::Information, "work queue consume connected");
+
+		std::tie(result, error_message) = consume_queue();
+		if (!result)
+		{
+			destroy_thread_pool();
+			work_queue_consume_->stop();
+			work_queue_consume_.reset();
+	
+			Logger::handle().write(LogTypes::Error, fmt::format("Failed to consume queue: {}", error_message.value()));
+			return { false, fmt::format("Failed to consume queue: {}", error_message.value()) };
+		}
+		return { true, std::nullopt };
 	}
 
 	auto S3ServiceMain::wait_stop() -> std::tuple<bool, std::optional<std::string>>
 	{
 		if (work_queue_consume_ == nullptr)
 		{
-			Logger::handle().write(LogTypes::Error, "KafkaQueueConsume is not initialized.");
-			return { false, "KafkaQueueConsume is not initialized." };
+			Logger::handle().write(LogTypes::Error, "QueueConsume is not initialized.");
+			return { false, "QueueConsume is not initialized." };
 		}
 
 		return work_queue_consume_->wait_stop();
@@ -46,7 +101,13 @@ namespace S3Service
 
 	auto S3ServiceMain::stop() -> void
 	{
-
+		if (work_queue_consume_ != nullptr)
+		{
+			work_queue_consume_->stop();
+			work_queue_consume_.reset();
+		}
+	
+		destroy_thread_pool();
 	}
 
 	auto S3ServiceMain::create_thread_pool() -> std::tuple<bool, std::optional<std::string>>
@@ -130,7 +191,70 @@ namespace S3Service
 
 	auto S3ServiceMain::consume_queue() -> std::tuple<bool, std::optional<std::string>>
 	{
-		return std::tuple<bool, std::optional<std::string>>();
+		if (work_queue_consume_ == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "QueueConsume is not initialized.");
+			return { false, "QueueConsume is not initialized." };
+		}
+
+		auto [declred_name, declred_error] = work_queue_consume_->channel_open(work_queue_consume_channel_id_, configurations_->consume_queue_name());
+		if (declred_name == std::nullopt)
+		{
+			Logger::handle().write(LogTypes::Error, declred_error.value());
+			return { false, declred_error };
+		}
+
+		auto [prepare_success, prepare_error] = work_queue_consume_->prepare_consume();
+		if (!prepare_success)
+		{
+			Logger::handle().write(LogTypes::Error, prepare_error.value());
+			return { false, prepare_error };
+		}
+
+		auto [consume_success, consume_error] = work_queue_consume_->register_consume(work_queue_consume_channel_id_, configurations_->consume_queue_name(),
+			[&](const std::string& queue_name, const std::string message, const std::string& message_type) -> std::tuple<bool, std::optional<std::string>>
+			{
+				auto json_value = boost::json::parse(message);
+				if (!json_value.is_object())
+				{
+					Logger::handle().write(LogTypes::Error, "Invalid message format.");
+					return { false, "Invalid message format." };
+				}
+
+				// TODO
+				// Add a message in addition to the command
+				auto received_message = json_value.as_object();
+				if (!received_message.contains("command") || !received_message.at("command").is_string())
+				{
+					Logger::handle().write(LogTypes::Error, "Invalid message format.");
+					return { false, "Invalid message format." };
+				}
+
+				auto command = received_message.at("command").as_string().data();
+				if (commands_.find(command) == commands_.end())
+				{
+					Logger::handle().write(LogTypes::Error, fmt::format("Invalid command: {}", command));
+					return { false, fmt::format("Invalid command: {}", command) };
+				}
+
+				auto [result, error_message] = commands_[command](message);
+				if (!result)
+				{
+					Logger::handle().write(LogTypes::Error, error_message.value());
+					return { false, error_message };
+				}
+
+				return { true, std::nullopt };
+			});
+
+		auto [result, message] = work_queue_consume_->start_consume();
+		if (!result)
+		{
+			Logger::handle().write(LogTypes::Error, message.value());
+			return { false, message };
+		}
+
+		return { true, std::nullopt };
 	}
 
 	auto S3ServiceMain::create_bucket(const std::string &message) -> std::tuple<bool, std::optional<std::string>>
@@ -153,11 +277,35 @@ namespace S3Service
 
 	auto S3ServiceMain::upload_file(const std::string &message) -> std::tuple<bool, std::optional<std::string>>
 	{
+		auto json_value = boost::json::parse(message);
+
+		auto [valid, error_message] = validate_upload_file_value(json_value);
+		if (!valid)
+		{
+			return { false, error_message };
+		}
+
+		auto received_message = json_value.as_object();
+
+		// TODO
+
 		return { true, std::nullopt };
 	}
 
 	auto S3ServiceMain::download_file(const std::string &message) -> std::tuple<bool, std::optional<std::string>>
 	{
+		auto json_value = boost::json::parse(message);
+
+		auto [valid, error_message] = validate_download_file_value(json_value);
+		if (!valid)
+		{
+			return { false, error_message };
+		}
+
+		auto received_message = json_value.as_object();
+
+		// TODO
+
 		return { true, std::nullopt };
 	}
 }
