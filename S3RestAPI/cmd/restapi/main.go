@@ -50,14 +50,22 @@ func main() {
 	defer transport.CloseRedis()
 
 	router := gin.Default()
+	router.GET("/health", controllers.HealthCheck)
+	router.GET("/login", controllers.LoginHandler)
 
 	/*
 		// Use middleware for API group
 		apiGroup := router.Group("/api")
 		apiGroup.Use(middleware.AuthMiddleware())
 		{
-			apiGroup.POST("/buckets/:bucket/files", controllers.UploadFile)
-			apiGroup.DELETE("/buckets/:bucket/files/:filename", controllers.RemoveFile)
+			router.POST("/buckets/:bucket/files", controllers.UploadFile)
+			router.DELETE("/buckets/:bucket/files/:filename", controllers.RemoveFile)
+
+			router.GET("/tasks/:id/status", controllers.TaskStatus)
+
+			router.POST("/buckets", controllers.CreateBucket)
+			router.GET("/buckets/:bucket/files/:filename/download", controllers.DownloadFile)
+			router.GET("/buckets/:bucket/files", controllers.ListFiles)
 		}
 	*/
 
@@ -65,7 +73,6 @@ func main() {
 	router.DELETE("/buckets/:bucket/files/:filename", controllers.RemoveFile)
 
 	router.GET("/tasks/:id/status", controllers.TaskStatus)
-	router.GET("/health", controllers.HealthCheck)
 
 	router.POST("/buckets", controllers.CreateBucket)
 	router.GET("/buckets/:bucket/files/:filename/download", controllers.DownloadFile)
