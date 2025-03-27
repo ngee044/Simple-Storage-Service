@@ -2,7 +2,6 @@
 package controllers
 
 import (
-	"fmt"
 	"net/http"
 
 	"S3RestAPI/internal/models"
@@ -20,29 +19,23 @@ func UploadFile(c *gin.Context) {
 	}
 
 	var request models.FileRequest
-	if err := c.ShouldBindJSON(&request); err != nil || request.Name == "" {
+	if err := c.ShouldBindJSON(&request); err != nil || request.Filename == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	requestId := uuid.New().String()
-	taskKey := "task:" + requestId
-	if err := transport.redisClient.Set(transport.ContextBg, taskKey, "File uploaded", 0).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 
 	message := models.TaskMessage{
 		Action:     "upload_file",
 		BucketName: bucketName,
-		Filename:   request.Name,
+		FileName:   request.Filename,
 		RequestID:  requestId,
 	}
 
-	err := transport.PublishMessage(message, requestId)
+	err := transport.RabbitMQPublishMessage(message, requestId)
 	if err != nil {
-		transport.redisClient.Set(transport.ContextBg, taskKey, "Failed to publish message", 0)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish message"})
 		return
 	}
 
@@ -57,17 +50,21 @@ func DownloadFile(c *gin.Context) {
 		return
 	}
 
-	key := fmt.Sprintf("file:%s:%s:download", bucket, filename)
-	val, err := transport.redisClient.Get(transport.context_bg, key).Result()
-	if err == transport.redisClient.Nil() {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	requestId := uuid.New().String()
+	message := models.TaskMessage{
+		Action:     "download_file",
+		BucketName: bucket,
+		FileName:   filename,
+		RequestID:  requestId,
+	}
+
+	err := transport.RabbitMQPublishMessage(message, requestId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish message"})
 		return
 	}
 
-	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(val))
+	c.JSON(http.StatusAccepted, gin.H{"request_id": requestId})
 }
 
 func RemoveFile(c *gin.Context) {
@@ -77,26 +74,20 @@ func RemoveFile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bucket filename required"})
 		return
 	}
-	requestId := uuid.New().String()
-	taskKey := "task:" + requestId
-	if err := transport.redisClient.Set(transport.context_bg, taskKey, "Running", 0).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to set task status"})
-		return
-	}
 
+	requestId := uuid.New().String()
 	message := models.TaskMessage{
 		Action:     "remove_file",
 		BucketName: bucket,
-		Filename:   filename,
+		FileName:   filename,
 		RequestID:  requestId,
 	}
 
-	err := transport.PublishMessage(message, requestId)
+	err := transport.RabbitMQPublishMessage(message, requestId)
 	if err != nil {
-		transport.redisClient.Set(transport.context_bg, taskKey, "Fail", 0)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish message"})
 		return
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{"correlation_id": requestId})
+	c.JSON(http.StatusAccepted, gin.H{"request_id": requestId})
 }

@@ -50,10 +50,10 @@ func CloseRabbitMQ() {
 	}
 }
 
-func PublishMessage(payload interface{}, guid string) error {
-	body, err := json.Marshal(payload)
+func RabbitMQPublishMessage(message interface{}, guid string) error {
+	body, err := json.Marshal(message)
 	if err != nil {
-		return fmt.Errorf("Failed to marshal payload: %v", err)
+		return fmt.Errorf("Failed to marshal a message: %v", err)
 	}
 
 	err = rabbitChannel.Publish(
@@ -70,6 +70,22 @@ func PublishMessage(payload interface{}, guid string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("Failed to publish a message: %v", err)
+	}
+	return nil
+}
+
+func RabbitMQPing() error {
+	if rabbitConn == nil {
+		return fmt.Errorf("RabbitMQ connection is nil")
+	}
+
+	if rabbitChannel == nil {
+		return fmt.Errorf("RabbitMQ channel is nil")
+	}
+
+	_, err := rabbitChannel.QueueInspect(queueName)
+	if err != nil {
+		return fmt.Errorf("Failed to inspect queue: %v", err)
 	}
 	return nil
 }

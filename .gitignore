@@ -385,3 +385,5 @@ target/
 # VsCode
 .vscode/
 CMakeSettings.json
+.env.production
+.env

@@ -3,23 +3,19 @@ package controllers
 import (
 	"net/http"
 
+	"S3RestAPI/internal/transport"
+
 	"github.com/gin-gonic/gin"
 )
 
 func HealthCheck(c *gin.Context) {
-	if err := transport.redisClient.Ping(transport.context_bg).Err(); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-			"error":  "Redis ping fail: " + err.Error(),
-		})
+	if redis_err := transport.RedisPing(); redis_err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": redis_err.Error()})
 		return
 	}
 
-	if transport.rabbitChannel == nil || transport.rabbitConn == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-			"error":  "RabbitMQ channel/conn nil",
-		})
+	if rabbit_err := transport.RabbitMQPing(); rabbit_err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": rabbit_err.Error()})
 		return
 	}
 

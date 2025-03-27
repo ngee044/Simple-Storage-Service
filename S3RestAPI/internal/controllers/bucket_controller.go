@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -11,20 +10,18 @@ import (
 	"github.com/google/uuid"
 
 	"S3RestAPI/internal/models"
-	"S3RestAPI/internal/transport"
 )
 
 func CreateBucket(c *gin.Context) {
 	var bucket_request models.BucketRequest
-	if err := c.ShouldBindJSON(&bucket_request); err != nil || request.Name == "" {
+	if err := c.ShouldBindJSON(&bucket_request); err != nil || bucket_request.BucketName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	requestID := uuid.New().String()
-	taskKey := "task:" + requestID
 
-	if err := transport.redisClient.Set(transport.context_bg, taskKey, "Bucket created", 0).Err(); err != nil {
+	if err := transport.RedisDataSet(requestID, "create_bucket"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -32,13 +29,13 @@ func CreateBucket(c *gin.Context) {
 	message := gin.H{
 		"action":      "create_bucket",
 		"request_id":  requestID,
-		"bucket_name": bucket_request.Name,
+		"bucket_name": bucket_request.BucketName,
 		"created_at":  time.Now().Format(time.RFC3339),
 	}
 
-	err := transport.PublishMessage(message, requestID)
+	err := transport.RabbitMQPublishMessage(message, requestID)
 	if err != nil {
-		transport.redisClient.Set(transport.context_bg, taskKey, "Failed to publish message", 0)
+		transport.RedisDataSet(requestID, "Failed to publish message")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -54,15 +51,25 @@ func ListFiles(c *gin.Context) {
 		return
 	}
 
-	key := fmt.Sprintf("bucket:%s:files", bucket)
-	val, err := transport.redisClient.Get(transport.context_bg, key).Result()
-	if err != transport.redisClient.Nil {
-		c.JSON(http.StatusOK, gin.H{"bucket": bucket, "files": []string{}})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "파일 목록 조회 실패"})
+	requestID := uuid.New().String()
+	message := gin.H{
+		"action":      "bucket_file_list",
+		"request_id":  requestID,
+		"bucket_name": bucket,
+	}
+
+	err := transport.RabbitMQPublishMessage(message, requestID)
+	if err != nil {
+		transport.RedisDataSet(requestID, "Failed to publish message")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"bucket": bucket, "files": val})
+	response_message := gin.H{
+		"action":     "bucket_file_list",
+		"bucket":     bucket,
+		"request_id": requestID,
+	}
+
+	c.JSON(http.StatusAccepted, response_message)
 }

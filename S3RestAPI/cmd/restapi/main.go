@@ -1,22 +1,50 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 
 	"S3RestAPI/internal/controllers"
 	"S3RestAPI/internal/transport"
 )
 
-func main() {
+func getEnv(key, defaultValue string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultValue
+	}
+	return val
+}
 
-	if err := transport.SetupRabbitMQ("amqp://guest:guest@localhost:5672/", "request_message"); err != nil {
+func main() {
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "development"
+	}
+
+	envFile := fmt.Sprintf(".env.%s", env)
+	if err := godotenv.Load(envFile); err != nil {
+		log.Println("No .env file found")
+	}
+
+	rabbitmqDns := getEnv("RABBITMQ_DNS", "amqp://guest:guest@localhost:5672/")
+	rabbitmqQueue := getEnv("RABBITMQ_QUEUE", "")
+
+	redisDns := getEnv("REDIS_ADDR", "localhost:6379")
+	redisPassword := getEnv("REDIS_PASS", "")
+
+	serverPort := getEnv("SERVER_PORT", ":8080")
+
+	if err := transport.SetupRabbitMQ(rabbitmqDns, rabbitmqQueue); err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 	defer transport.CloseRabbitMQ()
 
-	if err := transport.SetupRedis("localhost:6379", ""); err != nil {
+	if err := transport.SetupRedis(redisDns, redisPassword); err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	defer transport.CloseRedis()
@@ -43,8 +71,9 @@ func main() {
 	router.GET("/buckets/:bucket/files/:filename/download", controllers.DownloadFile)
 	router.GET("/buckets/:bucket/files", controllers.ListFiles)
 
-	log.Println("Starting REST API server on :8080...")
-	if err := router.Run(":8080"); err != nil {
+	addr := ":" + serverPort
+	log.Printf("Server is running on %s\n", addr)
+	if err := router.Run(addr); err != nil {
 		log.Fatalf("Server run error: %v", err)
 	}
 }
