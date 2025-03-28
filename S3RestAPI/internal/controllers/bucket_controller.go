@@ -14,8 +14,12 @@ import (
 
 func CreateBucket(c *gin.Context) {
 	var bucket_request models.BucketRequest
-	if err := c.ShouldBindJSON(&bucket_request); err != nil || bucket_request.BucketName == "" {
+	if err := c.ShouldBindJSON(&bucket_request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if bucket_request.BucketName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Bucket name is required"})
 		return
 	}
 
