@@ -27,10 +27,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			return
-		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			if exp, ok := claims["exp"].(float64); ok {

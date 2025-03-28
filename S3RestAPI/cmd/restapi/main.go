@@ -37,7 +37,7 @@ func main() {
 	redisDns := getEnv("REDIS_ADDR", "localhost:6379")
 	redisPassword := getEnv("REDIS_PASS", "")
 
-	serverPort := getEnv("SERVER_PORT", ":8080")
+	serverPort := getEnv("SERVER_PORT", "8080")
 
 	if err := transport.SetupRabbitMQ(rabbitmqDns, rabbitmqQueue); err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
