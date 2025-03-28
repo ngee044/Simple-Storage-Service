@@ -10,8 +10,6 @@ import (
 )
 
 var redisClient *redis.Client
-var context_bg = context.Background()
-
 func SetupRedis(addr, password string) error {
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:     addr,
