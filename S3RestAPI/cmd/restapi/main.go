@@ -51,8 +51,7 @@ func main() {
 
 	router := gin.Default()
 	router.GET("/health", controllers.HealthCheck)
-	router.GET("/login", controllers.LoginHandler)
-
+	router.POST("/login", controllers.LoginHandler)
 	/*
 		// Use middleware for API group
 		apiGroup := router.Group("/api")
