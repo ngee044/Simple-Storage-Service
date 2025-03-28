@@ -19,8 +19,13 @@ func UploadFile(c *gin.Context) {
 	}
 
 	var request models.FileRequest
-	if err := c.ShouldBindJSON(&request); err != nil || request.Filename == "" {
+	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if request.Filename == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Filename required"})
 		return
 	}
 

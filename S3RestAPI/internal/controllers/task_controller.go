@@ -2,9 +2,11 @@ package controllers
 
 import (
 	"S3RestAPI/internal/transport"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
 )
 
 func TaskStatus(c *gin.Context) {
@@ -16,8 +18,7 @@ func TaskStatus(c *gin.Context) {
 
 	val, err := transport.RedisDataGet(id)
 	if err != nil {
-		if err.Error() == "redis: nil" {
-			// request_id not found
+		if errors.Is(err, redis.Nil) {
 			val = "Not yet consumed"
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
