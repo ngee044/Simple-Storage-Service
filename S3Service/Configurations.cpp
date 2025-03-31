@@ -46,6 +46,7 @@ Configurations::Configurations(ArgumentParser&& arguments)
 	, engine_("")
 	, client_cert_("")
 	, client_key_("")
+	, storage_path_("")
 	
 {
 	root_path_ = arguments.program_folder();
@@ -117,6 +118,8 @@ auto Configurations::client_cert() -> std::string { return client_cert_; }
 auto Configurations::client_key() -> std::string { return client_key_; }
 
 auto Configurations::consume_queue_name() -> std::string { return consume_queue_name_; }
+
+auto Configurations::storage_path() -> std::string { return storage_path_; }
 
 auto Configurations::load() -> void
 {
@@ -296,6 +299,11 @@ auto Configurations::load() -> void
 	if (message.contains("consume_queue_name") && message.at("consume_queue_name").is_string())
 	{
 		consume_queue_name_ = message.at("consume_queue_name").as_string().data();
+	}
+
+	if (message.contains("storage_path") && message.at("storage_path").is_string())
+	{
+		storage_path_ = message.at("storage_path").as_string().data();
 	}
 }
 

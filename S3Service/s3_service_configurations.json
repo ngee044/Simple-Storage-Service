@@ -24,6 +24,8 @@
 	"rabbit_mq_password": "guest",
 
     "consume_queue_name": "request_message",
+
+	"storage_path": "",
 	
 	"empty": ""
 }

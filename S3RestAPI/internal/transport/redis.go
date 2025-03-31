@@ -2,7 +2,6 @@
 package transport
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 )
 
 var redisClient *redis.Client
+
 func SetupRedis(addr, password string) error {
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:     addr,
