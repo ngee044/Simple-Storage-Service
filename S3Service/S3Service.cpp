@@ -20,10 +20,40 @@ namespace S3Service
 		, is_running_(false)
 		, thread_pool_(nullptr)
 		, work_queue_consume_(nullptr)
+		, file_storage_(nullptr)
 	{
 		if (configurations_ == nullptr)
 		{
 			Logger::handle().write(LogTypes::Error, "Configurations is not initialized.");
+			return;
+		}
+
+		file_storage_ = std::make_shared<FileStorage>(configurations_->storage_path());
+		if (file_storage_ == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "Failed to create FileStorage.");
+			return;
+		}
+
+		auto conn_str = fmt::format("user={} dbname={} password={} host={} port={}", 
+			configurations_->database_user_name(), 
+			configurations_->database_name(), 
+			configurations_->database_password(), 
+			configurations_->database_server_ip(), 
+			configurations_->database_server_port()
+		);
+
+		auto db = std::make_shared<Database::PostgresDB>(conn_str);
+		if (db == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "Failed to create PostgresDB.");
+			return;
+		}
+
+		s3_meta_db_ = std::make_shared<S3MetaDB::S3MetaDB>(db);
+		if (s3_meta_db_ == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "Failed to create S3MetaDB.");
 			return;
 		}
 
@@ -269,7 +299,23 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
+		auto bucket_name = received_message.at("bucket_name").as_string().data();
+		auto region = received_message.at("region").as_string().data();
+
+		auto [result, error_message] = s3_meta_db_->bucket_exists(bucket_name);
+		if (result)
+		{
+			return { false, fmt::format("Bucket '{}' already exists.", bucket_name) };
+		}
+
+		auto [create_result, create_error] = s3_meta_db_->create_bucket(bucket_name);
+		if (!create_result)
+		{
+			return { false, fmt::format("Failed to create bucket: {}", create_error.value()) };
+		}
+
 		// TODO
+		// Create bucket in S3 storage
 
 
 		return { true, std::nullopt };
@@ -287,7 +333,17 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
-		// TODO
+		auto bucket_name = received_message.at("bucket_name").as_string().data();
+		auto file_name = received_message.at("file_name").as_string().data();
+		auto file_path = received_message.at("file_path").as_string().data();
+
+		auto [result, error_message] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!result)
+		{
+			return { false, fmt::format("Bucket '{}' does not exist.", bucket_name) };
+		}
+
+
 
 		return { true, std::nullopt };
 	}
@@ -304,7 +360,17 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
-		// TODO
+		auto bucket_name = received_message.at("bucket_name").as_string().data();
+		auto file_name = received_message.at("file_name").as_string().data();
+		auto file_path = received_message.at("file_path").as_string().data();
+
+		auto [result, error_message] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!result)
+		{
+			return { false, fmt::format("Bucket '{}' does not exist.", bucket_name) };
+		}
+
+
 
 		return { true, std::nullopt };
 	}

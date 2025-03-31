@@ -4,6 +4,8 @@
 #include "ThreadPool.h"
 #include "Logger.h"
 #include "WorkQueueConsume.h"
+#include "FileStorage.h"
+#include "S3MetaDB.h"
 
 
 #include <string>
@@ -15,6 +17,7 @@
 
 using namespace Thread;
 using namespace RabbitMQ;
+using namespace S3FileStorage;
 
 namespace S3Service
 {
@@ -47,6 +50,9 @@ namespace S3Service
 		std::shared_ptr<ThreadPool> thread_pool_;
 
 		const int work_queue_consume_channel_id_ = 1;
+
+		std::shared_ptr<FileStorage> file_storage_;
+		std::shared_ptr<S3MetaDB::S3MetaDB> s3_meta_db_;
 	
 	};
 }
