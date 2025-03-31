@@ -52,6 +52,8 @@ public:
 	auto client_cert() -> std::string;
 	auto client_key() -> std::string;
 
+	auto storage_path() -> std::string;
+
 	auto consume_queue_name() -> std::string;
 
 protected:
@@ -99,4 +101,6 @@ private:
 	std::string engine_;
 	std::string client_cert_;
 	std::string client_key_;
+
+	std::string storage_path_;
 };
