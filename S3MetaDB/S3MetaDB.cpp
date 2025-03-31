@@ -114,7 +114,7 @@ namespace S3MetaDB
 			auto [success, err2Opt] = db_->execute_query(update_query);
 			if (!success)
 			{
-				return return { false, err2Opt.value() };;
+				return { false, err2Opt.value() };;
 			}
 		}
 
