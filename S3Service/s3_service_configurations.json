@@ -13,7 +13,11 @@
     "database_server_ip": "127.0.0.1",
 	"database_server_port": 9877,
 	"database_registered_key": "database_server",
-
+	"database_name": "s3_service",
+	"database_user_name": "root",
+	"database_password": "root",
+	"database_table_name": "s3_service",
+	
     "main_server_port": 9876,
 	"buffer_size": 32768,
 	"encrypt_mode" : true,

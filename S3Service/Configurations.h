@@ -32,6 +32,14 @@ public:
 	auto server_ip() -> std::string;
 	auto server_port() -> uint16_t;
 
+	auto database_registered_key() -> std::string;
+	auto database_server_ip() -> std::string;
+	auto database_server_port() -> uint16_t;
+	auto database_user_name() -> std::string;
+	auto database_password() -> std::string;
+	auto database_name() -> std::string;
+	auto database_table_name() -> std::string;
+
 	auto redis_host() -> std::string;
 	auto redis_port() -> int;
 	auto redis_ttl_sec() -> int;
@@ -79,6 +87,14 @@ private:
 	std::size_t buffer_size_;
 	std::string server_ip_;
 	uint16_t server_port_;
+
+	std::string database_registered_key_; 
+	std::string database_server_ip_;
+	uint16_t database_server_port_;
+	std::string database_user_name_; 
+	std::string database_password_; 
+	std::string database_name_; 
+	std::string database_table_name_; 
 
 	std::string redis_host_;
 	int redis_port_;

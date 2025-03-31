@@ -83,6 +83,20 @@ auto Configurations::server_ip() -> std::string { return server_ip_; }
 
 auto Configurations::server_port() -> uint16_t { return server_port_; }
 
+auto Configurations::database_registered_key() -> std::string { return database_registered_key_; }
+
+auto Configurations::database_server_ip() -> std::string { return database_server_ip_; }
+
+auto Configurations::database_server_port() -> uint16_t { return database_server_port_; }
+
+auto Configurations::database_user_name() -> std::string { return database_user_name_; }
+
+auto Configurations::database_password() -> std::string { return database_password_; }
+
+auto Configurations::database_name() -> std::string { return database_name_; }
+
+auto Configurations::database_table_name() -> std::string { return database_table_name_; }	
+
 auto Configurations::redis_host() -> std::string { return redis_host_; }
 
 auto Configurations::redis_port() -> int { return redis_port_; }

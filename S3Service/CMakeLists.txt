@@ -20,7 +20,7 @@ project(${PROGRAM_NAME} VERSION 1.0.0.0)
 add_executable(${PROGRAM_NAME} ${HEADER_FILES} ${SOURCE_FILES})
 
 #target_link_libraries(${PROGRAM_NAME} PUBLIC S3Common S3Auth S3Core S3FileStorage S3MetaDB Utilities Thread Network Redis RabbitMQ)
-target_link_libraries(${PROGRAM_NAME} PUBLIC S3Common Utilities Thread Network Redis RabbitMQ )
+target_link_libraries(${PROGRAM_NAME} PUBLIC S3Common S3MetaDB S3FileStorage Utilities Thread Network Redis RabbitMQ )
 target_include_directories(${PROGRAM_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 set(JSON_FILES
