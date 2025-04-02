@@ -18,7 +18,7 @@ namespace S3MetaDB
 
 			auto bucket_exists(const std::string& bucket_name) -> std::tuple<bool, std::optional<std::string>>;
 			auto create_bucket(const std::string& bucket_name) -> std::tuple<bool, std::optional<std::string>>;
-			auto update_object(const std::string& bucket_name, const std::string& object_name, std::int64_t file_size) -> std::tuple<bool, std::optional<std::string>>;
+			auto update_object(const std::string& bucket_name, const std::string& object_name, const std::string& file_name) -> std::tuple<bool, std::optional<std::string>>;
 
 		protected:
 			auto exec_params_check(const std::string& sql, const int nParams, const char* const* paramValues, const int& param_lengths, const int* param_formats, bool expect_tuples = false) 

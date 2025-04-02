@@ -318,6 +318,10 @@ auto Configurations::load() -> void
 	if (message.contains("storage_path") && message.at("storage_path").is_string())
 	{
 		storage_path_ = message.at("storage_path").as_string().data();
+		if (storage_path_.empty() || storage_path_ == "test_path")
+		{
+			storage_path_ = root_path_ + "test_storage/";
+		}
 	}
 }
 
