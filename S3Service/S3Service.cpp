@@ -256,8 +256,6 @@ namespace S3Service
 					return { false, "Invalid message format." };
 				}
 
-				// TODO
-				// Add a message in addition to the command
 				auto received_message = json_value.as_object();
 				if (!received_message.contains("command") || !received_message.at("command").is_string())
 				{
@@ -363,6 +361,9 @@ namespace S3Service
 			return { false, fmt::format("[upload_file] Failed to update object: {}", update_error.value()) };
 		}
 
+		// TODO
+		// Implement file upload logic here.
+
 		return { true, std::nullopt };
 	}
 
@@ -395,6 +396,10 @@ namespace S3Service
 		}
 
 		auto file_path = file_storage_->get_file_path(bucket_name, object_name, file_name);
+
+		// TODO
+		// Implement file download logic here.
+
 
 		return { true, std::nullopt };
 	}
