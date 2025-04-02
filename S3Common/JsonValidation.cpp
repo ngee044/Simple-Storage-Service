@@ -45,9 +45,9 @@ namespace S3Common
 				return { false, "Invalid file_name" };
 			}
 
-			if (!message.contains("file_path") || !message.at("file_path").is_string())
+			if (!message.contains("object_name") || !message.at("object_name").is_string())
 			{
-				return { false, "Invalid file_path" };
+				return { false, "Invalid object_name" };
 			}
 
 			return { true, std::nullopt };

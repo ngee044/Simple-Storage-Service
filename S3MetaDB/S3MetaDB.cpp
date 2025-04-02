@@ -52,7 +52,7 @@ namespace S3MetaDB
 		return { true, std::nullopt };
 	}
 
-	auto S3MetaDB::update_object(const std::string& bucket_name, const std::string& object_name, std::int64_t file_size) -> std::tuple<bool, std::optional<std::string>>
+	auto S3MetaDB::update_object(const std::string& bucket_name, const std::string& object_name, const std::string& file_name) -> std::tuple<bool, std::optional<std::string>>
 	{
 		auto check_bucket_query = fmt::format("SELECT bucket_name FROM s3_buckets WHERE bucket_name = '{}';", bucket_name);
 
@@ -65,7 +65,7 @@ namespace S3MetaDB
 
 		if (result.value().empty())
 		{
-			auto insert_query = fmt::format("INSERT INTO s3_buckets (bucket_name) VALUES ({}, '{}', {});", bucket_name, object_name, file_size);
+			auto insert_query = fmt::format("INSERT INTO s3_buckets (bucket_name) VALUES ({}, '{}', {});", bucket_name, object_name, file_name);
 			auto [insert_result, insert_error] = db_->execute_query(insert_query);
 			if (!insert_result)
 			{
@@ -78,7 +78,7 @@ namespace S3MetaDB
 		}
 
 		int object_id = std::get<int>(result.value()[0][0]);
-		auto update_query = fmt::format("UPDATE s3_buckets SET file_size = {}, updated_at = NOW() WHERE bucket_name = {};", file_size, bucket_name);
+		auto update_query = fmt::format("UPDATE s3_buckets SET file_name = {}, updated_at = NOW() WHERE bucket_name = {};", file_name, bucket_name);
 
 		auto [update_result, update_error] = db_->execute_query_and_get_result(update_query);
 		if (!update_result.has_value())
@@ -89,11 +89,10 @@ namespace S3MetaDB
 
 		if (update_result->empty())
    		{
-			// 아직 오브젝트가 없다면 INSERT
 			auto update_query = fmt::format(
-				"INSERT INTO s3_objects (bucket_id, object_key, file_size) "
+				"INSERT INTO s3_objects (bucket_id, object_key, file_name) "
 				"VALUES ({}, '{}', {});",
-				object_name, object_name, file_size);
+				object_name, object_name, file_name);
 
 			auto [success, err2Opt] = db_->execute_query(update_query);
 			if (!success)
@@ -103,13 +102,12 @@ namespace S3MetaDB
 		}
 		else
 		{
-			// 이미 있으면 UPDATE (file_size, updated_at 등)
 			int object_name = std::get<int>((*update_result)[0][0]);
 			auto update_query = fmt::format(
 				"UPDATE s3_objects "
-				"SET file_size = {}, updated_at = NOW() "
+				"SET file_name = {}, updated_at = NOW() "
 				"WHERE id = {};",
-				file_size, object_name);
+				file_name, object_name);
 
 			auto [success, err2Opt] = db_->execute_query(update_query);
 			if (!success)

@@ -20,6 +20,7 @@ namespace S3Service
 		, is_running_(false)
 		, thread_pool_(nullptr)
 		, work_queue_consume_(nullptr)
+		, file_storage_(nullptr)
 	{
 		if (configurations_ == nullptr)
 		{
@@ -27,9 +28,43 @@ namespace S3Service
 			return;
 		}
 
+		file_storage_ = std::make_shared<FileStorage>(configurations_->storage_path());
+		if (file_storage_ == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "Failed to create FileStorage.");
+			return;
+		}
+
+		auto conn_str = fmt::format("user={} dbname={} password={} host={} port={}", 
+			configurations_->database_user_name(), 
+			configurations_->database_name(), 
+			configurations_->database_password(), 
+			configurations_->database_server_ip(), 
+			configurations_->database_server_port()
+		);
+
+		auto db = std::make_shared<Database::PostgresDB>(conn_str);
+		if (db == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "Failed to create PostgresDB.");
+			return;
+		}
+
+		s3_meta_db_ = std::make_shared<S3MetaDB::S3MetaDB>(db);
+		if (s3_meta_db_ == nullptr)
+		{
+			Logger::handle().write(LogTypes::Error, "Failed to create S3MetaDB.");
+			return;
+		}
+
 		commands_.insert({ "create_bucket", std::bind(&S3ServiceMain::create_bucket, this, std::placeholders::_1) });
 		commands_.insert({ "upload_file", std::bind(&S3ServiceMain::upload_file, this, std::placeholders::_1) });
 		commands_.insert({ "download_file", std::bind(&S3ServiceMain::download_file, this, std::placeholders::_1) });
+		
+		commands_.insert({"test_command", [](const std::string& message) -> std::tuple<bool, std::optional<std::string>> {
+			Logger::handle().write(LogTypes::Information, fmt::format("Test command received: {}", message));
+			return { true, std::nullopt };
+		}});
 	}
 
 	S3ServiceMain::~S3ServiceMain()
@@ -269,8 +304,27 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
-		// TODO
+		auto bucket_name = received_message.at("bucket_name").as_string().data();
+		auto region = received_message.at("region").as_string().data();
 
+		auto [result, exists_error] = s3_meta_db_->bucket_exists(bucket_name);
+		if (result)
+		{
+			Logger::handle().write(LogTypes::Error, fmt::format("Bucket '{}' already exists. = {}", bucket_name, exists_error.value()));
+			return { false, fmt::format("Bucket '{}' already exists. = {}", bucket_name, exists_error.value()) };
+		}
+
+		auto [create_result, create_error] = s3_meta_db_->create_bucket(bucket_name);
+		if (!create_result)
+		{
+			return { false, fmt::format("Failed to create bucket: {}", create_error.value()) };
+		}
+
+		auto [create_folder_result, create_folder_error] = file_storage_->create_folder(bucket_name);
+		if (!create_folder_result)
+		{
+			return { false, fmt::format("Failed to create folder: {}", create_folder_error.value()) };
+		}
 
 		return { true, std::nullopt };
 	}
@@ -287,7 +341,27 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
-		// TODO
+		auto bucket_name = received_message.at("bucket_name").as_string().data();
+		auto object_name = received_message.at("object_name").as_string().data();
+		auto file_name = received_message.at("file_name").as_string().data();
+
+		auto [result, error] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!result)
+		{
+			return { false, fmt::format("[upload_file] Bucket '{}' does not exist. = {}", bucket_name, error.value()) };
+		}
+
+		std::tie(result, error) = file_storage_->append_file(file_name, object_name);
+		if (!result)
+		{
+			return { false, fmt::format("[upload_file] Failed to upload file: {}", error.value()) };
+		}
+
+		auto [update_result, update_error] = s3_meta_db_->update_object(bucket_name, object_name, file_name);
+		if (!update_result)
+		{
+			return { false, fmt::format("[upload_file] Failed to update object: {}", update_error.value()) };
+		}
 
 		return { true, std::nullopt };
 	}
@@ -304,7 +378,23 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
-		// TODO
+		auto bucket_name = received_message.at("bucket_name").as_string().data();
+		auto object_name = received_message.at("object_name").as_string().data();
+		auto file_name = received_message.at("file_name").as_string().data();
+
+		auto [result, exists_error] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!result)
+		{
+			return { false, fmt::format("[download_file] Bucket '{}' does not exist. = {}", bucket_name, exists_error.value()) };
+		}
+
+		auto [file_exists, file_error] = file_storage_->file_exists(bucket_name, object_name, file_name);
+		if (!file_exists)
+		{
+			return { false, fmt::format("[download_file] File '{}' does not exist. = {}", file_name, file_error.value()) };
+		}
+
+		auto file_path = file_storage_->get_file_path(bucket_name, object_name, file_name);
 
 		return { true, std::nullopt };
 	}
