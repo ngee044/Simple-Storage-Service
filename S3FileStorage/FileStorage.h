@@ -22,6 +22,7 @@ namespace S3FileStorage
 		auto append_file(const std::string &file_name, const std::string &object_name) -> std::tuple<bool, std::optional<std::string>>;
 		auto download_file(const std::string &file_name, const std::string &object_name) -> std::tuple<bool, std::optional<std::string>>;
 
+		auto get_file_path(const std::string &bucket_name, const std::string &object_name, const std::string &file_name) -> std::string;
 	protected:
 		auto load_storage() -> std::tuple<bool, std::optional<std::string>>;
 

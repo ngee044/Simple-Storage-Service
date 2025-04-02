@@ -127,6 +127,7 @@ namespace S3FileStorage
 
 		return { true, std::nullopt };
 	}
+	
 	auto FileStorage::get_file_path(const std::string &bucket_name, const std::string &object_name, const std::string &file_name) -> std::string
 	{
 		return fmt::format("{}/{}/{}/{}", s3_storage_path_, bucket_name, object_name, file_name);
