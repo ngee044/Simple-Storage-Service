@@ -50,6 +50,7 @@ func main() {
 	defer transport.CloseRedis()
 
 	router := gin.Default()
+	router.POST("/testapi", controllers.SendTestCommand)
 	router.GET("/health", controllers.HealthCheck)
 	router.POST("/login", controllers.LoginHandler)
 	/*
@@ -67,7 +68,6 @@ func main() {
 			router.GET("/buckets/:bucket/files", controllers.ListFiles)
 		}
 	*/
-
 	router.POST("/buckets/:bucket/files", controllers.UploadFile)
 	router.DELETE("/buckets/:bucket/files/:filename", controllers.RemoveFile)
 
