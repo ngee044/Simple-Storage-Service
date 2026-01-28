@@ -21,6 +21,7 @@ namespace S3Service
 		, thread_pool_(nullptr)
 		, work_queue_consume_(nullptr)
 		, file_storage_(nullptr)
+		, redis_client_(nullptr)
 	{
 		if (configurations_ == nullptr)
 		{
@@ -35,11 +36,11 @@ namespace S3Service
 			return;
 		}
 
-		auto conn_str = fmt::format("user={} dbname={} password={} host={} port={}", 
-			configurations_->database_user_name(), 
-			configurations_->database_name(), 
-			configurations_->database_password(), 
-			configurations_->database_server_ip(), 
+		auto conn_str = fmt::format("user={} dbname={} password={} host={} port={}",
+			configurations_->database_user_name(),
+			configurations_->database_name(),
+			configurations_->database_password(),
+			configurations_->database_server_ip(),
 			configurations_->database_server_port()
 		);
 
@@ -57,10 +58,17 @@ namespace S3Service
 			return;
 		}
 
+		redis_client_ = std::make_shared<S3Common::RedisClient>(
+			configurations_->redis_host(),
+			configurations_->redis_port()
+		);
+
 		commands_.insert({ "create_bucket", std::bind(&S3ServiceMain::create_bucket, this, std::placeholders::_1) });
 		commands_.insert({ "upload_file", std::bind(&S3ServiceMain::upload_file, this, std::placeholders::_1) });
 		commands_.insert({ "download_file", std::bind(&S3ServiceMain::download_file, this, std::placeholders::_1) });
-		
+		commands_.insert({ "remove_file", std::bind(&S3ServiceMain::remove_file, this, std::placeholders::_1) });
+		commands_.insert({ "bucket_file_list", std::bind(&S3ServiceMain::list_files, this, std::placeholders::_1) });
+
 		commands_.insert({"test_command", [](const std::string& message) -> std::tuple<bool, std::optional<std::string>> {
 			Logger::handle().write(LogTypes::Information, fmt::format("Test command received: {}", message));
 			return { true, std::nullopt };
@@ -79,6 +87,17 @@ namespace S3Service
 		{
 			Logger::handle().write(LogTypes::Error, error_message.value());
 			return { false, error_message };
+		}
+
+		if (redis_client_)
+		{
+			auto [redis_ok, redis_error] = redis_client_->connect();
+			if (!redis_ok)
+			{
+				Logger::handle().write(LogTypes::Error, fmt::format("Failed to connect to Redis: {}", redis_error.value_or("unknown error")));
+				return { false, fmt::format("Failed to connect to Redis: {}", redis_error.value_or("unknown error")) };
+			}
+			Logger::handle().write(LogTypes::Information, "Redis client connected");
 		}
 
 		SSLOptions ssl_options;
@@ -257,16 +276,26 @@ namespace S3Service
 				}
 
 				auto received_message = json_value.as_object();
-				if (!received_message.contains("command") || !received_message.at("command").is_string())
+				if (!received_message.contains("action") || !received_message.at("action").is_string())
 				{
-					Logger::handle().write(LogTypes::Error, "Invalid message format.");
-					return { false, "Invalid message format." };
+					Logger::handle().write(LogTypes::Error, "Invalid message format: missing 'action' field.");
+					return { false, "Invalid message format: missing 'action' field." };
 				}
 
-				auto command = received_message.at("command").as_string().data();
+				std::string request_id;
+				if (received_message.contains("request_id") && received_message.at("request_id").is_string())
+				{
+					request_id = received_message.at("request_id").as_string().data();
+				}
+
+				auto command = received_message.at("action").as_string().data();
 				if (commands_.find(command) == commands_.end())
 				{
 					Logger::handle().write(LogTypes::Error, fmt::format("Invalid command: {}", command));
+					if (!request_id.empty())
+					{
+						store_result(request_id, false, fmt::format("Invalid command: {}", command));
+					}
 					return { false, fmt::format("Invalid command: {}", command) };
 				}
 
@@ -274,7 +303,16 @@ namespace S3Service
 				if (!result)
 				{
 					Logger::handle().write(LogTypes::Error, error_message.value());
+					if (!request_id.empty())
+					{
+						store_result(request_id, false, error_message.value_or("Unknown error"));
+					}
 					return { false, error_message };
+				}
+
+				if (!request_id.empty())
+				{
+					store_result(request_id, true, "Success");
 				}
 
 				return { true, std::nullopt };
@@ -339,30 +377,35 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
-		auto bucket_name = received_message.at("bucket_name").as_string().data();
-		auto object_name = received_message.at("object_name").as_string().data();
-		auto file_name = received_message.at("file_name").as_string().data();
+		auto bucket_name = std::string(received_message.at("bucket_name").as_string());
+		auto object_key = std::string(received_message.at("object_name").as_string());
 
-		auto [result, error] = s3_meta_db_->bucket_exists(bucket_name);
-		if (!result)
+		auto [bucket_exists, bucket_error] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!bucket_exists)
 		{
-			return { false, fmt::format("[upload_file] Bucket '{}' does not exist. = {}", bucket_name, error.value()) };
+			return { false, fmt::format("[upload_file] Bucket '{}' does not exist.", bucket_name) };
 		}
 
-		std::tie(result, error) = file_storage_->append_file(file_name, object_name);
-		if (!result)
+		std::string file_data;
+		if (received_message.contains("data") && received_message.at("data").is_string())
 		{
-			return { false, fmt::format("[upload_file] Failed to upload file: {}", error.value()) };
+			file_data = std::string(received_message.at("data").as_string());
 		}
 
-		auto [update_result, update_error] = s3_meta_db_->update_object(bucket_name, object_name, file_name);
+		auto [write_result, write_error] = file_storage_->write_file(bucket_name, object_key, file_data);
+		if (!write_result)
+		{
+			return { false, fmt::format("[upload_file] Failed to write file: {}", write_error.value_or("unknown")) };
+		}
+
+		auto [update_result, update_error] = s3_meta_db_->update_object(bucket_name, object_key, object_key);
 		if (!update_result)
 		{
-			return { false, fmt::format("[upload_file] Failed to update object: {}", update_error.value()) };
+			return { false, fmt::format("[upload_file] Failed to update metadata: {}", update_error.value_or("unknown")) };
 		}
 
-		// TODO
-		// Implement file upload logic here.
+		Logger::handle().write(LogTypes::Information,
+			fmt::format("Uploaded file '{}' to bucket '{}'", object_key, bucket_name));
 
 		return { true, std::nullopt };
 	}
@@ -379,28 +422,148 @@ namespace S3Service
 
 		auto received_message = json_value.as_object();
 
-		auto bucket_name = received_message.at("bucket_name").as_string().data();
-		auto object_name = received_message.at("object_name").as_string().data();
-		auto file_name = received_message.at("file_name").as_string().data();
+		auto bucket_name = std::string(received_message.at("bucket_name").as_string());
+		auto object_key = std::string(received_message.at("object_name").as_string());
 
-		auto [result, exists_error] = s3_meta_db_->bucket_exists(bucket_name);
-		if (!result)
+		auto [bucket_exists, bucket_error] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!bucket_exists)
 		{
-			return { false, fmt::format("[download_file] Bucket '{}' does not exist. = {}", bucket_name, exists_error.value()) };
+			return { false, fmt::format("[download_file] Bucket '{}' does not exist.", bucket_name) };
 		}
 
-		auto [file_exists, file_error] = file_storage_->file_exists(bucket_name, object_name, file_name);
+		auto [file_exists, file_error] = file_storage_->file_exists(bucket_name, object_key);
 		if (!file_exists)
 		{
-			return { false, fmt::format("[download_file] File '{}' does not exist. = {}", file_name, file_error.value()) };
+			return { false, fmt::format("[download_file] Object '{}' does not exist.", object_key) };
 		}
 
-		auto file_path = file_storage_->get_file_path(bucket_name, object_name, file_name);
+		auto [file_data, read_error] = file_storage_->read_file(bucket_name, object_key);
+		if (!file_data.has_value())
+		{
+			return { false, fmt::format("[download_file] Failed to read file: {}", read_error.value_or("unknown")) };
+		}
 
-		// TODO
-		// Implement file download logic here.
-
+		Logger::handle().write(LogTypes::Information,
+			fmt::format("Downloaded file '{}' from bucket '{}' ({} bytes)",
+				object_key, bucket_name, file_data->size()));
 
 		return { true, std::nullopt };
+	}
+
+	auto S3ServiceMain::remove_file(const std::string &message) -> std::tuple<bool, std::optional<std::string>>
+	{
+		auto json_value = boost::json::parse(message);
+		auto received_message = json_value.as_object();
+
+		if (!received_message.contains("bucket_name") || !received_message.at("bucket_name").is_string())
+		{
+			return { false, "Invalid message: missing bucket_name" };
+		}
+
+		std::string bucket_name = std::string(received_message.at("bucket_name").as_string());
+		std::string object_key;
+
+		if (received_message.contains("object_name") && received_message.at("object_name").is_string())
+		{
+			object_key = std::string(received_message.at("object_name").as_string());
+		}
+		else if (received_message.contains("file_name") && received_message.at("file_name").is_string())
+		{
+			object_key = std::string(received_message.at("file_name").as_string());
+		}
+		else
+		{
+			return { false, "Invalid message: missing object_name or file_name" };
+		}
+
+		auto [bucket_exists, bucket_error] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!bucket_exists)
+		{
+			return { false, fmt::format("[remove_file] Bucket '{}' does not exist.", bucket_name) };
+		}
+
+		auto [file_exists, file_error] = file_storage_->file_exists(bucket_name, object_key);
+		if (!file_exists)
+		{
+			return { false, fmt::format("[remove_file] Object '{}' does not exist.", object_key) };
+		}
+
+		auto [delete_file_result, delete_file_error] = file_storage_->delete_file(bucket_name, object_key);
+		if (!delete_file_result)
+		{
+			return { false, fmt::format("[remove_file] Failed to delete file: {}", delete_file_error.value_or("unknown")) };
+		}
+
+		auto [delete_db_result, delete_db_error] = s3_meta_db_->delete_object(bucket_name, object_key);
+		if (!delete_db_result)
+		{
+			Logger::handle().write(LogTypes::Warning,
+				fmt::format("File deleted but metadata removal failed: {}", delete_db_error.value_or("unknown")));
+		}
+
+		Logger::handle().write(LogTypes::Information,
+			fmt::format("Removed file '{}' from bucket '{}'", object_key, bucket_name));
+
+		return { true, std::nullopt };
+	}
+
+	auto S3ServiceMain::list_files(const std::string &message) -> std::tuple<bool, std::optional<std::string>>
+	{
+		auto json_value = boost::json::parse(message);
+		auto received_message = json_value.as_object();
+
+		if (!received_message.contains("bucket_name") || !received_message.at("bucket_name").is_string())
+		{
+			return { false, "Invalid message: missing bucket_name" };
+		}
+
+		std::string bucket_name = std::string(received_message.at("bucket_name").as_string());
+
+		auto [bucket_exists, bucket_error] = s3_meta_db_->bucket_exists(bucket_name);
+		if (!bucket_exists)
+		{
+			return { false, fmt::format("[list_files] Bucket '{}' does not exist.", bucket_name) };
+		}
+
+		auto [objects, list_error] = s3_meta_db_->list_objects(bucket_name);
+		if (!objects.has_value())
+		{
+			return { false, fmt::format("[list_files] Failed to list objects: {}", list_error.value_or("unknown")) };
+		}
+
+		Logger::handle().write(LogTypes::Information,
+			fmt::format("Listed {} files in bucket '{}'", objects->size(), bucket_name));
+
+		return { true, std::nullopt };
+	}
+
+	auto S3ServiceMain::store_result(const std::string& request_id, bool success, const std::string& detail) -> void
+	{
+		if (!redis_client_ || !redis_client_->is_connected())
+		{
+			Logger::handle().write(LogTypes::Warning, "Redis client not connected, cannot store result");
+			return;
+		}
+
+		boost::json::object result_obj;
+		result_obj["status"] = success ? "Success" : "Fail";
+		result_obj["detail"] = detail;
+
+		std::string result_json = boost::json::serialize(result_obj);
+
+		auto [ok, error] = redis_client_->set(
+			request_id,
+			result_json,
+			std::chrono::seconds(configurations_->redis_ttl_sec())
+		);
+
+		if (!ok)
+		{
+			Logger::handle().write(LogTypes::Error, fmt::format("Failed to store result in Redis: {}", error.value_or("unknown error")));
+		}
+		else
+		{
+			Logger::handle().write(LogTypes::Information, fmt::format("Stored result for request_id: {}", request_id));
+		}
 	}
 }

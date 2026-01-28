@@ -21,8 +21,9 @@
 	  "boost-filesystem",
 	  "libplist",
 	  "librabbitmq",
-	  "modern-cpp-kafka", 
-	  "boost-process"
+	  "modern-cpp-kafka",
+	  "boost-process",
+	  "gtest"
 	]
   }
   

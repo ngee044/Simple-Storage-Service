@@ -1,0 +1,77 @@
+# Build stage
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    zip \
+    unzip \
+    tar \
+    pkg-config \
+    libssl-dev \
+    ninja-build \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install vcpkg
+WORKDIR /opt
+RUN git clone https://github.com/Microsoft/vcpkg.git && \
+    ./vcpkg/bootstrap-vcpkg.sh
+
+ENV VCPKG_ROOT=/opt/vcpkg
+ENV PATH="${VCPKG_ROOT}:${PATH}"
+
+# Copy vcpkg.json for dependency installation
+WORKDIR /build
+COPY vcpkg.json .
+
+# Install vcpkg dependencies (this takes a while)
+RUN vcpkg install --triplet x64-linux
+
+# Copy source code
+COPY CMakeLists.txt .
+COPY S3Common/ S3Common/
+COPY S3FileStorage/ S3FileStorage/
+COPY S3MetaDB/ S3MetaDB/
+COPY S3Service/ S3Service/
+COPY .cpp_tool_kit/ .cpp_tool_kit/
+
+# Build
+RUN mkdir -p build && cd build && \
+    cmake .. \
+    -DCMAKE_TOOLCHAIN_FILE=/opt/vcpkg/scripts/buildsystems/vcpkg.cmake \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF && \
+    cmake --build . --config Release
+
+# Runtime stage
+FROM ubuntu:22.04
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libpq5 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /build/build/out/S3Service .
+
+# Copy Docker-specific config
+COPY Docker/s3_service_configurations.docker.json ./s3_service_configurations.json
+
+# Create storage directory
+RUN mkdir -p /app/storage
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+CMD ["./S3Service"]

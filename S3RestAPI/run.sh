@@ -1,1 +1,1 @@
-APP_ENV=production bin/restapi
+APP_ENV=production bin/RestAPI

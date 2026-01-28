@@ -6,7 +6,7 @@
 #include "WorkQueueConsume.h"
 #include "FileStorage.h"
 #include "S3MetaDB.h"
-
+#include "RedisClient.h"
 
 #include <string>
 #include <memory>
@@ -30,7 +30,7 @@ namespace S3Service
 		auto start() -> std::tuple<bool, std::optional<std::string>>;
 		auto wait_stop() -> std::tuple<bool, std::optional<std::string>>;
 		auto stop() -> void;
-	
+
 	protected:
 		auto create_thread_pool() -> std::tuple<bool, std::optional<std::string>>;
 		auto destroy_thread_pool() -> void;
@@ -40,11 +40,15 @@ namespace S3Service
 		auto create_bucket(const std::string& message) -> std::tuple<bool, std::optional<std::string>>;
 		auto upload_file(const std::string& message) -> std::tuple<bool, std::optional<std::string>>;
 		auto download_file(const std::string& message) -> std::tuple<bool, std::optional<std::string>>;
+		auto remove_file(const std::string& message) -> std::tuple<bool, std::optional<std::string>>;
+		auto list_files(const std::string& message) -> std::tuple<bool, std::optional<std::string>>;
+
+		auto store_result(const std::string& request_id, bool success, const std::string& detail) -> void;
 
 	private:
 		std::map<std::string, std::function<std::tuple<bool, std::optional<std::string>>(const std::string&)>> commands_;
 		bool is_running_;
-		
+
 		std::shared_ptr<WorkQueueConsume> work_queue_consume_;
 		std::shared_ptr<Configurations> configurations_;
 		std::shared_ptr<ThreadPool> thread_pool_;
@@ -53,6 +57,7 @@ namespace S3Service
 
 		std::shared_ptr<FileStorage> file_storage_;
 		std::shared_ptr<S3MetaDB::S3MetaDB> s3_meta_db_;
-	
+		std::shared_ptr<S3Common::RedisClient> redis_client_;
+
 	};
 }

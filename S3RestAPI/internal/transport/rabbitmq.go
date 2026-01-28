@@ -51,6 +51,10 @@ func CloseRabbitMQ() {
 }
 
 func RabbitMQPublishMessage(message interface{}, guid string) error {
+	if IsMockEnabled() {
+		return mockRabbitMQPublish(message, guid)
+	}
+
 	body, err := json.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("Failed to marshal a message: %v", err)
@@ -75,6 +79,10 @@ func RabbitMQPublishMessage(message interface{}, guid string) error {
 }
 
 func RabbitMQPing() error {
+	if IsMockEnabled() {
+		return mockRabbitPing()
+	}
+
 	if rabbitConn == nil {
 		return fmt.Errorf("RabbitMQ connection is nil")
 	}

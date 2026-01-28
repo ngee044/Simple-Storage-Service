@@ -30,10 +30,16 @@ func CreateBucket(c *gin.Context) {
 		return
 	}
 
+	region := bucket_request.Region
+	if region == "" {
+		region = "us-east-1" // default region
+	}
+
 	message := gin.H{
 		"action":      "create_bucket",
 		"request_id":  requestID,
 		"bucket_name": bucket_request.BucketName,
+		"region":      region,
 		"created_at":  time.Now().Format(time.RFC3339),
 	}
 

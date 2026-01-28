@@ -31,14 +31,23 @@ func CloseRedis() {
 }
 
 func RedisDataSet(key, value string) error {
+	if IsMockEnabled() {
+		return mockRedisSet(key, value)
+	}
 	return redisClient.Set(key, value, 600*time.Second).Err()
 }
 
 func RedisDataGet(key string) (string, error) {
+	if IsMockEnabled() {
+		return mockRedisGet(key)
+	}
 	return redisClient.Get(key).Result()
 }
 
 func RedisPing() error {
+	if IsMockEnabled() {
+		return mockRedisPing()
+	}
 	if redisClient == nil {
 		return fmt.Errorf("Redis client is nil")
 	}

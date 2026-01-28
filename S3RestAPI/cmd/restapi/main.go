@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"S3RestAPI/internal/controllers"
+	"S3RestAPI/internal/middleware"
 	"S3RestAPI/internal/transport"
 )
 
@@ -31,7 +32,7 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	rabbitmqDns := getEnv("RABBITMQ_DNS", "amqp://guest:guest@localhost:5672/")
+	rabbitmqDsn := getEnv("RABBITMQ_DSN", "amqp://guest:guest@localhost:5672/")
 	rabbitmqQueue := getEnv("RABBITMQ_QUEUE", "")
 
 	redisDns := getEnv("REDIS_ADDR", "localhost:6379")
@@ -39,7 +40,7 @@ func main() {
 
 	serverPort := getEnv("SERVER_PORT", "8080")
 
-	if err := transport.SetupRabbitMQ(rabbitmqDns, rabbitmqQueue); err != nil {
+	if err := transport.SetupRabbitMQ(rabbitmqDsn, rabbitmqQueue); err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 	defer transport.CloseRabbitMQ()
@@ -50,32 +51,23 @@ func main() {
 	defer transport.CloseRedis()
 
 	router := gin.Default()
-	router.POST("/testapi", controllers.SendTestCommand)
+
+	// Public endpoints (no authentication required)
 	router.GET("/health", controllers.HealthCheck)
 	router.POST("/login", controllers.LoginHandler)
-	/*
-		// Use middleware for API group
-		apiGroup := router.Group("/api")
-		apiGroup.Use(middleware.AuthMiddleware())
-		{
-			router.POST("/buckets/:bucket/files", controllers.UploadFile)
-			router.DELETE("/buckets/:bucket/files/:filename", controllers.RemoveFile)
+	router.POST("/register", controllers.RegisterHandler)
 
-			router.GET("/tasks/:id/status", controllers.TaskStatus)
-
-			router.POST("/buckets", controllers.CreateBucket)
-			router.GET("/buckets/:bucket/files/:filename/download", controllers.DownloadFile)
-			router.GET("/buckets/:bucket/files", controllers.ListFiles)
-		}
-	*/
-	router.POST("/buckets/:bucket/files", controllers.UploadFile)
-	router.DELETE("/buckets/:bucket/files/:filename", controllers.RemoveFile)
-
-	router.GET("/tasks/:id/status", controllers.TaskStatus)
-
-	router.POST("/buckets", controllers.CreateBucket)
-	router.GET("/buckets/:bucket/files/:filename/download", controllers.DownloadFile)
-	router.GET("/buckets/:bucket/files", controllers.ListFiles)
+	// Protected endpoints (authentication required)
+	api := router.Group("/")
+	api.Use(middleware.AuthMiddleware())
+	{
+		api.POST("/buckets", controllers.CreateBucket)
+		api.GET("/buckets/:bucket/files", controllers.ListFiles)
+		api.POST("/buckets/:bucket/files", controllers.UploadFile)
+		api.GET("/buckets/:bucket/files/:filename/download", controllers.DownloadFile)
+		api.DELETE("/buckets/:bucket/files/:filename", controllers.RemoveFile)
+		api.GET("/tasks/:id/status", controllers.TaskStatus)
+	}
 
 	addr := ":" + serverPort
 	log.Printf("Server is running on %s\n", addr)

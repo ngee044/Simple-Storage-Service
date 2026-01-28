@@ -1,35 +1,38 @@
 {
     "server_title" : "S3Service",
-	"server_sub_title" : "S3Service",
+    "server_sub_title" : "S3Service",
     "main_registered_key": "s3_service",
 
     "high_priority_count" : 3,
-	"normal_priority_count" : 3,
-	"low_priority_count" : 5,
-	"write_console_log" : 3,
-	"write_file_log" : 0,
-	"console_windows": false,
+    "normal_priority_count" : 3,
+    "low_priority_count" : 5,
+    "write_console_log" : 3,
+    "write_file_log" : 0,
+    "console_windows": false,
 
     "database_server_ip": "127.0.0.1",
-	"database_server_port": 9877,
-	"database_registered_key": "database_server",
-	"database_name": "s3_service",
-	"database_user_name": "root",
-	"database_password": "root",
-	"database_table_name": "s3_service",
-	
-    "main_server_port": 9876,
-	"buffer_size": 32768,
-	"encrypt_mode" : true,
+    "database_server_port": 5432,
+    "database_registered_key": "database_server",
+    "database_name": "s3_service",
+    "database_user_name": "root",
+    "database_password": "root",
+    "database_table_name": "s3_service",
 
-	"rabbit_mq_host": "localhost",
-	"rabbit_mq_port": 5672,
-	"rabbit_mq_user_name": "guest",
-	"rabbit_mq_password": "guest",
+    "main_server_port": 9876,
+    "buffer_size": 32768,
+    "encrypt_mode" : true,
+
+    "rabbit_mq_host": "localhost",
+    "rabbit_mq_port": 5672,
+    "rabbit_mq_user_name": "guest",
+    "rabbit_mq_password": "guest",
 
     "consume_queue_name": "request_message",
 
-	"storage_path": "",
-	
-	"empty": ""
+    "use_redis": true,
+    "redis_host": "localhost",
+    "redis_port": 6379,
+    "redis_ttl_sec": 3600,
+
+    "storage_path": ""
 }

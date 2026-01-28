@@ -9,6 +9,7 @@ type TaskMessage struct {
 
 type BucketRequest struct {
 	BucketName string `json:"bucket_name"`
+	Region     string `json:"region,omitempty"`
 }
 
 type FileRequest struct {
